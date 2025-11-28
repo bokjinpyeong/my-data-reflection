@@ -1,0 +1,414 @@
+import streamlit as st
+import pandas as pd
+import numpy as np
+import plotly.express as px
+import plotly.graph_objects as go
+from streamlit_gsheets import GSheetsConnection
+from sklearn.neighbors import NearestNeighbors
+from sklearn.decomposition import PCA
+from sklearn.preprocessing import StandardScaler
+from datetime import datetime
+import re
+from collections import Counter
+
+# -----------------------------------------------------------------------------
+# 1. 설정 및 초기화
+# -----------------------------------------------------------------------------
+st.set_page_config(
+    page_title="My Data Reflection",
+    page_icon="🌌",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# [핵심] 구글 시트 주소
+SHEET_URL = st.secrets["connections"]["gsheets"]["spreadsheet"]
+
+# 컬럼 정의
+COLS_SUBJECTS = ['경험명', '분야', '내용', 'NFC(탐구욕)', 'NCC(종결욕)', '호기심유형', '성취유형', '메모']
+COLS_ACTIVITIES = ['경험명', '유형', '내용', 'nAch(성취)', 'nPow(권력)', 'nAff(친화)', '몰입도(Flow)', '메모']
+COLS_BOOKS = ['경험명', '통합적복잡성', '정체성(분리/통합)', '의미부여']
+COLS_QUESTIONS = ['문항', '소재', '내용'] 
+
+
+# -----------------------------------------------------------------------------
+# 2. 데이터 핸들링
+# -----------------------------------------------------------------------------
+def get_data(worksheet_name, columns):
+    try:
+        conn = st.connection("gsheets", type=GSheetsConnection)
+        try:
+            df = conn.read(worksheet=worksheet_name, ttl=0, spreadsheet=SHEET_URL)
+        except TypeError:
+            df = conn.read(worksheet=worksheet_name, ttl=0)
+        
+        if worksheet_name == 'questions':
+            if not df.empty:
+                df = df.iloc[:, :2]
+                df.columns = ['구분', '문항내용']
+                return df
+            else:
+                return pd.DataFrame(columns=['구분', '문항내용'])
+
+        for col in columns:
+            if col not in df.columns: df[col] = pd.NA
+            
+        # 숫자 강제 변환
+        if worksheet_name == 'subjects':
+            for col in ['NFC(탐구욕)', 'NCC(종결욕)']:
+                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+        elif worksheet_name == 'activities':
+            for col in ['nAch(성취)', 'nPow(권력)', 'nAff(친화)', '몰입도(Flow)']:
+                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+        elif worksheet_name == 'books':
+            if '통합적복잡성' in df.columns:
+                df['통합적복잡성'] = pd.to_numeric(df['통합적복잡성'], errors='coerce').fillna(0)
+
+        return df[columns].dropna(how='all')
+    except Exception as e:
+        if worksheet_name == 'questions': return pd.DataFrame(columns=['구분', '문항내용'])
+        return pd.DataFrame(columns=columns)
+
+def add_data(worksheet_name, new_row_df, columns):
+    try:
+        conn = st.connection("gsheets", type=GSheetsConnection)
+        try:
+            existing_data = conn.read(worksheet=worksheet_name, ttl=0, spreadsheet=SHEET_URL)
+            updated_data = pd.concat([existing_data, new_row_df], ignore_index=True)
+            conn.update(worksheet=worksheet_name, data=updated_data, spreadsheet=SHEET_URL)
+        except TypeError:
+            existing_data = conn.read(worksheet=worksheet_name, ttl=0)
+            updated_data = pd.concat([existing_data, new_row_df], ignore_index=True)
+            conn.update(worksheet=worksheet_name, data=updated_data)
+        st.cache_data.clear()
+        return True
+    except Exception as e:
+        st.error(f"저장 실패: {e}")
+        return False
+
+# 데이터 로드
+df_subjects = get_data("subjects", COLS_SUBJECTS)
+df_activities = get_data("activities", COLS_ACTIVITIES)
+df_books = get_data("books", COLS_BOOKS)
+df_questions = get_data("questions", COLS_QUESTIONS)
+
+
+# -----------------------------------------------------------------------------
+# 3. 사이드바 (가중치 & 백업)
+# -----------------------------------------------------------------------------
+with st.sidebar:
+    st.title("My Data Reflection")
+    st.caption("Archive, Describe, Reflect")
+    
+    menu = st.radio("MENU", [
+        "1. 소개", 
+        "2. 경험 모으기 (데이터 입력)", 
+        "3. 패턴 찾기 (통계/시각화)", 
+        "4. 연결 짓기 (유사 경험 찾기/kNN)", 
+        "5. 글로 옮기기 (자소서 작성)"
+    ])
+    
+    st.divider()
+    
+    # [기능 1] 가중치 조절
+    st.markdown("### 가중치 설정 (Weight)")
+    st.caption("무엇을 더 중요하게 평가할까요?")
+    w_fact = st.slider("Fact (성과/성취) 가중치", 0.5, 2.0, 1.0, 0.1)
+    w_feel = st.slider("Feeling (몰입/흥미) 가중치", 0.5, 2.0, 1.0, 0.1)
+    
+    st.divider()
+    
+    # [기능 2] 데이터 자동 백업 (수정됨: 전체 시트 백업)
+    st.markdown("### 데이터 백업")
+    if st.button("CSV 다운로드"):
+        csv_sub = df_subjects.to_csv(index=False).encode('utf-8-sig')
+        csv_act = df_activities.to_csv(index=False).encode('utf-8-sig')
+        csv_book = df_books.to_csv(index=False).encode('utf-8-sig')
+        csv_quest = df_questions.to_csv(index=False).encode('utf-8-sig')
+        
+        now = datetime.now().strftime("%Y%m%d")
+        
+        st.download_button("교과목 백업", csv_sub, f"subjects_{now}.csv", "text/csv")
+        st.download_button("활동 백업", csv_act, f"activities_{now}.csv", "text/csv")
+        st.download_button("독서 백업", csv_book, f"books_{now}.csv", "text/csv")
+        st.download_button("자소서 백업", csv_quest, f"questions_{now}.csv", "text/csv")
+        
+        st.success("다운로드 준비 완료")
+
+# -----------------------------------------------------------------------------
+# 4. 메인 페이지
+# -----------------------------------------------------------------------------
+
+# [Page 1] Intro
+if menu == "1. 소개":
+    st.title("My Data Reflection: 흩어진 경험을 모으고 이어보자.")
+    st.subheader("Small Data와 kNN을 활용한 개인 맞춤 기록 및 반성 웹")
+    st.divider()
+
+    st.header("소개")
+    
+    
+    st.markdown("""
+    ### 기획 의도: 데이터를 기반으로 나를 기술(Describe)하고 성찰(Reflect)해보자.
+    """)
+
+   
+# [Page 2] Archive
+elif menu == "2. 경험 모으기 (데이터 입력)":
+    st.title("Archive")
+    
+    
+    tab1, tab2, tab3 = st.tabs(["① 교과목 (Subjects)", "② 대외활동 (Activities)", "③ 독서 (Books)"])
+
+    # Subjects
+    with tab1:
+        with st.form("sub_form"):
+            c1, c2 = st.columns([1, 1])
+            s_name = c1.text_input("과목명")
+            # 전공 트랙 분류 적용
+            s_cat = c2.selectbox("분야", [
+                "소비자공통", "가계경제/재무설계", "소비자상담/소비자보호", "소비자인사이트",
+                "프로그램 언어(Core)", "컴퓨터 시스템 및 인프라 (System)",
+                "데이터 사이언스 (Data)", "비즈니스 경영 (Business)"
+            ])
+            s_desc = st.text_area("내용", height=100)
+            c3, c4 = st.columns(2)
+            nfc = c3.slider("탐구욕 (NFC)", 0, 10, 5)
+            ncc = c4.slider("종결욕 (NCC)", 0, 10, 5)
+            s_memo = st.text_input("메모")
+            if st.form_submit_button("저장"):
+                add_data("subjects", pd.DataFrame([[s_name, s_cat, s_desc, nfc, ncc, "Mix", "Mix", s_memo]], columns=COLS_SUBJECTS), COLS_SUBJECTS)
+                st.rerun()
+        if not df_subjects.empty: st.dataframe(df_subjects, use_container_width=True)
+
+    # Activities
+    with tab2:
+        with st.form("act_form"):
+            a_name = st.text_input("활동명")
+            a_type = st.selectbox("유형", ["프로젝트(팀)", "개인 연구/개발", "학회/동아리", "인턴/실무", "아르바이트", "봉사", "자격증", "증서"])
+            c1, c2, c3 = st.columns(3)
+            nAch = c1.slider("성취 (nAch)", 0, 10, 5)
+            nPow = c2.slider("권력 (nPow)", 0, 10, 5)
+            nAff = c3.slider("친화 (nAff)", 0, 10, 5)
+            flow = st.slider("몰입도 (Flow)", 0, 100, 50)
+            a_memo = st.text_input("메모")
+            if st.form_submit_button("저장"):
+                add_data("activities", pd.DataFrame([[a_name, a_type, "", nAch, nPow, nAff, flow, a_memo]], columns=COLS_ACTIVITIES), COLS_ACTIVITIES)
+                st.rerun()
+        if not df_activities.empty: st.dataframe(df_activities, use_container_width=True)
+
+    # Books
+    with tab3:
+        with st.form("book_form"):
+            b_name = st.text_input("책 제목")
+            comp = st.slider("통합적 복잡성", 0, 10, 5)
+            meaning = st.text_input("의미 부여")
+            if st.form_submit_button("저장"):
+                add_data("books", pd.DataFrame([[b_name, comp, "Integrated", meaning]], columns=COLS_BOOKS), COLS_BOOKS)
+                st.rerun()
+        if not df_books.empty: st.dataframe(df_books, use_container_width=True)
+
+# [Page 3] Visualization (Describe)
+elif menu == "3. 패턴 찾기 (통계/시각화)":
+    st.title("Experience Description")
+    
+    # 1. 편향 확인 (Bias Check)
+    st.subheader("1. 경험의 편향 확인")
+    
+    col_b1, col_b2 = st.columns(2)
+    
+    with col_b1:
+        if len(df_subjects) > 0:
+            # 교과목 분야별 카운트
+            sub_counts = df_subjects['분야'].value_counts().reset_index()
+            sub_counts.columns = ['분야', '개수']
+            fig_sub = px.bar(sub_counts, x='개수', y='분야', orientation='h', 
+                             title="교과목 분야별 이수 현황", color='분야', text='개수')
+            st.plotly_chart(fig_sub, use_container_width=True)
+        else:
+            st.info("교과목 데이터가 없습니다.")
+            
+    with col_b2:
+        if len(df_activities) > 0:
+            # 활동 유형별 카운트 (도넛 차트)
+            act_counts = df_activities['유형'].value_counts().reset_index()
+            act_counts.columns = ['유형', '개수']
+            fig_act = px.pie(act_counts, values='개수', names='유형', hole=0.4, 
+                             title="대외활동 유형별 분포")
+            st.plotly_chart(fig_act, use_container_width=True)
+        else:
+            st.info("활동 데이터가 없습니다.")
+
+    st.divider()
+
+    # 2. 커스텀 랭킹
+    st.subheader("2. 가중치 기반 경험 순위")
+    st.markdown(f"**현재 가중치**: 성과(Fact) x {w_fact} + 흥미(Feeling) x {w_feel}")
+    
+    if len(df_activities) >= 1:
+        act_df = df_activities.copy()
+        cols_num = ['nAch(성취)', 'nPow(권력)', 'nAff(친화)', '몰입도(Flow)']
+        act_df[cols_num] = act_df[cols_num].apply(pd.to_numeric, errors='coerce').fillna(0)
+        
+        # 정규화 및 점수 계산
+        act_df['Fact_Score'] = (act_df['nAch(성취)'] + act_df['nPow(권력)']) / 2
+        act_df['Feel_Score'] = (act_df['nAff(친화)'] + (act_df['몰입도(Flow)']/10)) / 2
+        act_df['My_Score'] = (act_df['Fact_Score'] * w_fact) + (act_df['Feel_Score'] * w_feel)
+        
+        fig_rank = px.bar(act_df.sort_values('My_Score', ascending=True).tail(10), 
+                         x='My_Score', y='경험명', orientation='h',
+                         color='My_Score', title="나만의 Top 10 경험",
+                         hover_data=['메모'])
+        st.plotly_chart(fig_rank, use_container_width=True)
+    else:
+        st.warning("데이터가 부족합니다.")
+
+    st.divider()
+
+    # 3. 키워드 시각화
+    st.subheader("3. 메모 키워드")
+    all_text = " ".join(df_activities['메모'].dropna().astype(str).tolist() + 
+                        df_subjects['메모'].dropna().astype(str).tolist() +
+                        df_books['의미부여'].dropna().astype(str).tolist())
+    
+    words = re.findall(r'\w+', all_text)
+    stop_words = ['하는', '있는', '가장', '통해', '대한', '것이', '내가', '나의', '함', '음', '는', '은', '이', '가']
+    words = [w for w in words if len(w) > 1 and w not in stop_words]
+    word_counts = Counter(words).most_common(20)
+    
+    if word_counts:
+        wc_df = pd.DataFrame(word_counts, columns=['Keyword', 'Count'])
+        fig_tree = px.treemap(wc_df, path=['Keyword'], values='Count',
+                              color='Count', color_continuous_scale='Teal')
+        st.plotly_chart(fig_tree, use_container_width=True)
+    else:
+        st.info("메모 데이터가 충분하지 않습니다.")
+
+# [Page 4] AI Analysis (Reflect)
+elif menu == "4. 연결 짓기 (유사 경험 찾기/kNN)":
+    st.title(" Reference Finding (kNN)")
+    
+    
+    if len(df_activities) >= 3:
+        act_df = df_activities.copy()
+        numeric_cols = ['nAch(성취)', 'nPow(권력)', 'nAff(친화)']
+        act_df[numeric_cols] = act_df[numeric_cols].apply(pd.to_numeric, errors='coerce').fillna(0)
+        
+        # PCA
+        pca = PCA(n_components=2)
+        components = pca.fit_transform(act_df[numeric_cols])
+        act_df['x'] = components[:, 0]
+        act_df['y'] = components[:, 1]
+        act_df['Flow'] = pd.to_numeric(act_df['몰입도(Flow)'], errors='coerce').fillna(0)
+
+        # 사용자 선택
+        selected_act_name = st.selectbox(" 기준 경험 선택:", act_df['경험명'].tolist())
+        target_row = act_df[act_df['경험명'] == selected_act_name].iloc[0]
+        target_vec = target_row[numeric_cols].values.reshape(1, -1)
+        
+        # kNN
+        knn = NearestNeighbors(n_neighbors=min(4, len(act_df)), metric='euclidean')
+        knn.fit(act_df[numeric_cols])
+        distances, indices = knn.kneighbors(target_vec)
+        
+        col1, col2 = st.columns([2, 1])
+        
+        with col1:
+            # Experience Map (Star Chart)
+            fig = go.Figure()
+            # 배경 점
+            fig.add_trace(go.Scatter(
+                x=act_df['x'], y=act_df['y'], mode='markers+text',
+                marker=dict(size=act_df['Flow']*1.5, color=act_df['Flow'], colorscale='Bluered', showscale=True),
+                text=act_df['경험명'], textposition="top center", name='All',
+                hovertext=act_df['메모']
+            ))
+            # 선택된 점
+            fig.add_trace(go.Scatter(
+                x=[target_row['x']], y=[target_row['y']], mode='markers',
+                marker=dict(size=25, color='gold', symbol='star'), name='Selected'
+            ))
+            # 연결선
+            neighbor_indices = indices[0][1:]
+            for idx in neighbor_indices:
+                neighbor = act_df.iloc[idx]
+                fig.add_trace(go.Scatter(
+                    x=[target_row['x'], neighbor['x']], y=[target_row['y'], neighbor['y']],
+                    mode='lines', line=dict(color='gray', width=1, dash='dot'), showlegend=False
+                ))
+            
+            fig.update_layout(title="경험 연결 지도 (Experience Constellation)", height=500, plot_bgcolor='rgba(0,0,0,0)')
+            st.plotly_chart(fig, use_container_width=True)
+
+        with col2:
+            st.success(f"**{selected_act_name}**와(과) 가장 유사한 경험")
+            for i, idx in enumerate(neighbor_indices):
+                neighbor = act_df.iloc[idx]
+                st.markdown(f"**{i+1}. {neighbor['경험명']}**")
+                st.caption(f"메모: {neighbor['메모']}")
+                st.markdown("---")
+
+# [Page 5] Drafting
+elif menu == "5. 글로 옮기기 (자소서 작성)":
+    st.title(" Data-Driven Drafting")
+    
+    
+    if not df_questions.empty:
+        cats = df_questions.iloc[:, 0].unique()
+        selected_q = st.selectbox("질문 선택", cats)
+        filtered_qs = df_questions[df_questions.iloc[:, 0] == selected_q]
+        
+        
+        st.info(f"**Q. {selected_q}**")
+        
+        # [수정] 다중 소재 선택 (Multiselect)
+        all_materials = []
+        if not df_activities.empty:
+            all_materials += [f"[활동] {row['경험명']}" for i, row in df_activities.iterrows()]
+        if not df_subjects.empty:
+            all_materials += [f"[과목] {row['경험명']}" for i, row in df_subjects.iterrows()]
+        if not df_books.empty:
+            all_materials += [f"[독서] {row['경험명']}" for i, row in df_books.iterrows()]
+            
+        selected_materials = st.multiselect("소재 선택 (다중 선택 가능)", all_materials)
+        
+        # 선택된 소재의 상세 정보 표시
+        evidence_text = ""
+        if selected_materials:
+            st.markdown("##### 📌 선택된 소재 상세 정보")
+            for item in selected_materials:
+                # 대괄호 안의 타입과 이름 분리 "[활동] 이름"
+                m_type = item.split('] ')[0][1:]
+                m_name = item.split('] ')[1]
+                
+                detail = ""
+                if m_type == '활동':
+                    row = df_activities[df_activities['경험명'] == m_name].iloc[0]
+                    detail = f"성취: {row['nAch(성취)']} | 몰입: {row['몰입도(Flow)']} | 메모: {row['메모']}"
+                elif m_type == '과목':
+                    row = df_subjects[df_subjects['경험명'] == m_name].iloc[0]
+                    detail = f"탐구: {row['NFC(탐구욕)']} | 종결: {row['NCC(종결욕)']} | 메모: {row['메모']}"
+                elif m_type == '독서':
+                    row = df_books[df_books['경험명'] == m_name].iloc[0]
+                    detail = f"의미부여: {row['의미부여']}"
+                
+                st.caption(f"**{item}**: {detail}")
+                evidence_text += f"- {item}: {detail}\n"
+
+        with st.form("draft_form"):
+            content = st.text_area("작성 공간", height=400, 
+                                 value=evidence_text if evidence_text else "",
+                                 placeholder="선택한 소재를 바탕으로 글을 작성하세요.")
+            
+            if st.form_submit_button("저장 (DB)"):
+                if content:
+                    today = datetime.now().strftime("%Y-%m-%d")
+                    material_str = ", ".join(selected_materials) if selected_materials else "직접 작성"
+                    add_data("drafts", pd.DataFrame([[selected_q, material_str, content]], columns=COLS_QUESTIONS), COLS_QUESTIONS)
+                    st.success("저장되었습니다!")
+    else:
+        st.error(" 자소서 문항 데이터가 없습니다.")
+
+# Footer
+st.markdown("---")
+st.caption("My Data Reflection | Powered by Streamlit & Google Sheets")
