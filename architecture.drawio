@@ -1,0 +1,76 @@
+<mxfile host="65bd71144e">
+    <diagram id="Cfltx0CE-WN2BGSam1GT" name="페이지-1">
+        <mxGraphModel dx="686" dy="279" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="dev" value="Developer" style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;outlineConnect=0;fillColor=#dae8fc;strokeColor=#6c8ebf;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="220" width="30" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="github" value="GitHub Repository&#xa;(Source Code)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#181717;fontColor=#ffffff;strokeColor=#000000;fontStyle=1;arcSize=20;" parent="1" vertex="1">
+                    <mxGeometry x="120" y="225" width="140" height="50" as="geometry"/>
+                </mxCell>
+                <mxCell id="streamlit_cloud" value="Streamlit Cloud (Hosting)" style="swimlane;html=1;startSize=30;horizontal=1;container=1;collapsible=0;rounded=1;arcSize=10;fillColor=#FF4B4B;strokeColor=#CC0000;fontColor=#ffffff;fontStyle=1" parent="1" vertex="1">
+                    <mxGeometry x="320" y="80" width="500" height="520" as="geometry"/>
+                </mxCell>
+                <mxCell id="app_logic" value="Application Logic (app.py)" style="swimlane;html=1;startSize=20;fillColor=#f5f5f5;strokeColor=#666666;fontColor=#333333;" parent="streamlit_cloud" vertex="1">
+                    <mxGeometry x="20" y="50" width="460" height="450" as="geometry"/>
+                </mxCell>
+                <mxCell id="sidebar" value="Sidebar" style="swimlane;html=1;startSize=20;fillColor=#dae8fc;strokeColor=#6c8ebf;" parent="app_logic" vertex="1">
+                    <mxGeometry x="20" y="40" width="130" height="140" as="geometry"/>
+                </mxCell>
+                <mxCell id="config" value="Config &amp; Weights" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" parent="sidebar" vertex="1">
+                    <mxGeometry x="10" y="30" width="110" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="menu" value="Menu" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;" parent="sidebar" vertex="1">
+                    <mxGeometry x="15" y="70" width="100" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="tabs" value="Core Features" style="swimlane;html=1;startSize=20;fillColor=#fff2cc;strokeColor=#d6b656;" parent="app_logic" vertex="1">
+                    <mxGeometry x="170" y="40" width="270" height="390" as="geometry"/>
+                </mxCell>
+                <mxCell id="t_archive" value="Archive (Input Forms)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;" parent="tabs" vertex="1">
+                    <mxGeometry x="20" y="40" width="230" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="t_describe" value="Describe (Plotly Charts)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" parent="tabs" vertex="1">
+                    <mxGeometry x="20" y="90" width="230" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="t_reflect" value="Reflect (Scikit-Learn)&#xa;PCA &amp; kNN Logic" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" parent="tabs" vertex="1">
+                    <mxGeometry x="20" y="150" width="230" height="50" as="geometry"/>
+                </mxCell>
+                <mxCell id="t_draft" value="Draft (Writing)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;" parent="tabs" vertex="1">
+                    <mxGeometry x="20" y="220" width="230" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="secrets" value=".streamlit/secrets.toml&#xa;(API Keys)" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;darkOpacity=0.05;fillColor=#fff2cc;strokeColor=#d6b656;size=15;fontSize=10;" parent="app_logic" vertex="1">
+                    <mxGeometry x="20" y="370" width="130" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="gsheets" value="Google Sheets&lt;br&gt;(DataStore)" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#34A853;strokeColor=#2D7D46;fontColor=#ffffff;fontStyle=1" parent="1" vertex="1">
+                    <mxGeometry x="880" y="270" width="110" height="140" as="geometry"/>
+                </mxCell>
+                <mxCell id="end_user" value="End User" style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;outlineConnect=0;fillColor=#f5f5f5;strokeColor=#666666;" parent="1" vertex="1">
+                    <mxGeometry x="350" y="650" width="30" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="c_push" value="git push" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;dashed=1;" parent="1" source="dev" target="github" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="c_deploy" value="Auto Deploy" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;strokeWidth=2;" parent="1" source="github" target="streamlit_cloud" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="c_db" value="Read / Write&#xa;(st.connection)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;entryPerimeter=0;startArrow=classic;startFill=1;" parent="1" source="tabs" target="gsheets" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="850" y="340"/>
+                            <mxPoint x="850" y="340"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="c_access" value="Access via Web&#xa;(HTTPS)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0.25;entryY=1;entryDx=0;entryDy=0;" parent="1" source="end_user" target="streamlit_cloud" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="445" y="680"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+</mxfile>
